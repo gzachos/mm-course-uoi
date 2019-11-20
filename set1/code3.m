@@ -3,7 +3,7 @@
 % Developed using GNU Octave, version 4.2.2
 
 % Create sample AC coefficient array
-AC_coef = [7, 0, 3, 0, 2, 3, 0, 0, 2, 4, 0, 1, 0, 0, 0, 1, 0, 0, -1, -1, 0, 1];
+AC_coef = [7, 0, 3, 0, 2, 3, 0, 0, 2, 4, 0, 1, 0, 0, 0, 1, 0, 0, -1, -1, 0, 1, 0, 0, 0, 1];
 z = zeros(1, 63 - columns(AC_coef));
 AC_coef = cat(2, AC_coef, z);
 

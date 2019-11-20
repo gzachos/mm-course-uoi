@@ -12,9 +12,9 @@ SM = [10 16 13
       14 23 18
       16 25 20
       18 29 23];
- 
+
  x = rem(QP,6);
- 
+
  % find delta, lambda and mu values
  d = SM(x+1,1);
  l = SM(x+1,2);
@@ -24,10 +24,10 @@ SM = [10 16 13
       m l m l
       d m d m
       m l m l];
-  
+
  % find the inverse quantized coefficients
   Wi = Z.*V;
   Wi = bitshift(Wi,q-15,'int64'); % For Matlab
   % Wi = bitshift(Wi,q-15); % For Octave
- 
+
 end

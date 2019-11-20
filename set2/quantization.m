@@ -20,9 +20,9 @@ MF =[13107 5243 8066
      9362  3647 5825
      8192  3355 5243
      7282  2893 4559];
- 
+
 x = rem(QP,6);
- 
+
 a = MF(x+1,1);
 b = MF(x+1,2);
 g = MF(x+1,3);
@@ -32,11 +32,11 @@ M = [a g a g
      a g a g
      g b g b];
 
-% scaling and quantization 
+% scaling and quantization
 Z = round(W.*(M/2^q));
 
 % Z = W.*M;
 % Z = round(bitshift(Z,-q));
 
- 
+
 end

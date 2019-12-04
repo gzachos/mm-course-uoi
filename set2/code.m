@@ -135,19 +135,32 @@ skips = 0;
 for k = 1:rowb
 	for l = 1:colb
 		b = frame179_blocks{k,l};   % Let b hold current 16x16 block
-		b = double(b); % Cast uint8 to double to avoid integer_transform complaining
+		b = double(b);
 		xmin = 1 + (k-1)*16;
 		ymin = 1 + (l-1)*16;
 		xmax = k * 16;
 		ymax = l * 16;
 
 		a = r(xmin:xmax, ymin:ymax);
+		a = double(a);
 		sad = SAD(a,b);
 		if (sad < 150)
 			skips++;
 			MVs{k,l} = [0,0];
 			continue;
 		endif
+
+		#{
+		if (k == 3 && l == 1)
+			a
+			b
+			abs(a-b)
+			colormap(gray); imagesc(b)
+			pause(3);
+			colormap(gray); imagesc(a)
+			pause(3);
+		endif
+		#}
 
 		minSAD = {-1, [-10,-10]};
 		for i = -6:6
@@ -157,7 +170,16 @@ for k = 1:rowb
 					continue;
 				endif
 				a = r((xmin+i):(xmax+i), (ymin+j):(ymax+j));
+				a = double(a);
 				sad = SAD(a,b);
+				#{
+				if (i == 0 && j == 0 && k == 1 && l == 1)
+					a
+					b
+					abs(a-b)
+					sad
+				endif
+				#}
 				if (minSAD{1} == -1 || sad < minSAD{1})
 					minSAD{1} = sad;
 					minSAD{2} = [i,j];
@@ -165,10 +187,11 @@ for k = 1:rowb
 			endfor
 		endfor
 		MVs{k,l} = minSAD{2};
+		% printf("[%2d,%2d] %6d (%2d,%2d)\n", k, l, minSAD{1}, minSAD{2});
 	endfor
 endfor
 
-MVs
+MVs;
 
 printf('Blocks skipped: %2d\n', skips);
 

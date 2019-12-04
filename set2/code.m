@@ -132,6 +132,7 @@ r = i;
 
 % For every 16x16 block:
 skips = 0;
+skip(1:rowb, 1:colb) = {0};
 for k = 1:rowb
 	for l = 1:colb
 		b = frame179_blocks{k,l};   % Let b hold current 16x16 block
@@ -147,6 +148,7 @@ for k = 1:rowb
 		if (sad < 150)
 			skips++;
 			MVs{k,l} = [0,0];
+			skip(k,l) = 1;
 			continue;
 		endif
 
@@ -192,6 +194,7 @@ for k = 1:rowb
 endfor
 
 MVs;
+skip;
 
 printf('Blocks skipped: %2d\n', skips);
 

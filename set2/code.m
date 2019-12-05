@@ -12,6 +12,7 @@ function print_usage()
 	printf("USAGE: ./%s [OPTIONS]\n", program_name());
 	printf("Available options:\n");
 	printf("\t-h, --help             Display this information\n");
+	printf("\t-Q, --qp  QP           Quantization Parameter (Default: 25)\n");
 	printf("\t-s, --save-imgs        Save images\n");
 endfunction
 
@@ -99,13 +100,28 @@ endfunction
 
 % The following options can be altered using command-line arguments
 save_imgs = 0;    % Save images option. Default value: False
+QP = 25;          % Quantization Parameter. Default value: 25
 
 % Parse command-line arguments.
+read_qp = 0;
 arg_list = argv();
 for i = 1:nargin()
+	if (read_qp)
+		read_qp = 0;
+		qp = str2num(arg_list{i});
+		if (qp > 0)
+			QP = floor(qp);
+		else
+			printf("[WARNING]: Invalid QP value! Ignoring...\n\n");
+		endif
+		continue;
+	endif
 	if (strncmp(arg_list{i}, "--save-imgs", length("--save-imgs")) ||
 			strncmp(arg_list{i}, "-s", length("-s")))
 		save_imgs = 1;
+	elseif (strncmp(arg_list{i}, "--qp", length("--qp")) ||
+                        strncmp(arg_list{i}, "-Q", length("-Q")))
+		read_qp = 1;
 	elseif (strncmp(arg_list{i}, "--help", length("--help")) ||
 			strncmp(arg_list{i}, "-h", length("-h")))
 		print_usage();
@@ -127,7 +143,6 @@ frame179 = imread('frame179.tif');  % Read frame179 as a matrix
 %   Step #2                                               %
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-QP = 25;
 printf("\n################### QP = %2d ###################\n", QP);
 
 [r178, rows178, cols178, H178] = TQIH(frame178, QP);

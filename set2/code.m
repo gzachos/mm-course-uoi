@@ -96,11 +96,11 @@ i(i > 255) = [255];  % Make sure no values greater that 255 exist in image i
 
 r178 = i;
 
-% Calculate entropy of F_caret
+% Calculate entropy of F_caret (The quantized coefficients of frame 178)
 H = entropy(uint8(abs(F_caret)));
 printf("Entropy of the quantized coefficients of frame 178 (in bits/symbol) = %f\n", H);
 
-peaksnr = psnr(r178, frame178);   % Calculate Peak Signal-to-noise Ratio of image i
+peaksnr = psnr(r178, frame178);   % Calculate PSNR of the recreated frame 178
 printf("PSNR of the recreated frame 178 = %.4f dB\n", peaksnr);
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -117,15 +117,14 @@ if (mod(rows179,16) != 0 || mod(cols179,16) != 0)
 	return;
 endif
 
-rowb = fix(rows179/16);      % Rows can be partitioned in rowb 16x16 blocks
-colb = fix(cols179/16);      % Columns can be partitioned in colb 16x16 blocks
-block_num = rowb * colb; % Total number of 16x16 blocks
+rowb = fix(rows179/16);   % Rows can be partitioned in rowb 16x16 blocks
+colb = fix(cols179/16);   % Columns can be partitioned in colb 16x16 blocks
+block_num = rowb * colb;  % Total number of 16x16 blocks
 
 % Partition frame179 in 16x16 blocks
 row_block_sizes = ones(1,rowb) * 16;
 col_block_sizes = ones(1,colb) * 16;
 frame179_blocks = mat2cell(frame179, row_block_sizes, col_block_sizes);
-
 
 skips = 0;               % Counter for the number of skip blocks
 skip = false(rowb,colb); % Boolean array holding whether a block is skip
@@ -141,13 +140,14 @@ for k = 1:rowb
 
 		% Check if current block is a skip
 		a = r178(xmin:xmax, ymin:ymax);
-		a = double(a); % Required for calculating SAD
+		a = double(a); % Required for calculating SAD because
+		               % uint8 cannot store negative values (a-b).
 		sad = SAD(a,b);
 		if (sad < 150)
 			skips++;
 			MVs{k,l} = [0,0];
 			skip(k,l) = 1;
-			continue;
+			continue; % Skip the 13^2-1 checks of full search
 		endif
 
 		minSAD = {-1, [-10,-10]}; % {min SAD value, MV that resulted in the min SAD}
@@ -198,17 +198,18 @@ for k = 1:rowb
 
 		% Compensate motion for block (k,l) using the corresponding
 		% motion vector and the recreated frame 178.
-		b = r178((xmin+i):(xmax+i), (ymin+j):(ymax+j));
-		Prediction_blocks{k,l} = b;
+		p = r178((xmin+i):(xmax+i), (ymin+j):(ymax+j));
+		Prediction_blocks{k,l} = p;
+		% Calculate prediction error
 		if (skip(k,l) == 1) % In case of skip blocks, set prediction error to zero
 			PredErr_blocks{k,l} = zeros(16, 16);
 		else
-			PredErr_blocks{k,l} = frame179(xmin:xmax, ymin:ymax) - b;
+			PredErr_blocks{k,l} = frame179(xmin:xmax, ymin:ymax) - p;
 		endif
 	endfor
 endfor
 
-% Reconstruct images Pred and PredErr by concatenating the 4x4 blocks
+% Reconstruct images Pred and PredErr by concatenating the 16x16 blocks
 Pred = cell2mat(Prediction_blocks); % Prediction
 PredErr = cell2mat(PredErr_blocks); % Prediction Error
 
@@ -258,11 +259,16 @@ i = uint8(i);    % Convert image I to unsigned 8-bit integer type
 i(i < 0) = [0];      % Make sure no negative values exist in image i
 i(i > 255) = [255];  % Make sure no values greater that 255 exist in image i
 
-% Calculate entropy of F_caret
-H = entropy(uint8(abs(F_caret)));
-printf("Entropy of |F-caret| (in bits/symbol) = %f\n", H);
+rPE = i; % Recreated Prediction Error
 
-r179 = Pred + i; % Recreate frame 179 using prediction and recreated prediction error
+% Calculate entropy of F_caret (The quantized coefficients of Prediction Error)
+H = entropy(uint8(abs(F_caret)));
+printf("Entropy of the quantized coefficients of Prediction Error (in bits/symbol) = %f\n", H);
+
+r179 = Pred + rPE; % Recreate frame 179 using prediction and recreated prediction error
+
+peaksnr = psnr(r179, frame179);   % Calculate Peak Signal-to-noise Ratio of frame 179
+printf("PSNR of the recreated frame 179 = %.4f dB\n", peaksnr);
 
 #{
 colormap(gray); imagesc(r178)
@@ -276,9 +282,6 @@ pause(3);
 colormap(gray); imagesc(PredErr)
 pause(3);
 #}
-
-peaksnr = psnr(r179, frame179);   % Calculate Peak Signal-to-noise Ratio of frame 179
-printf("PSNR of the recreated frame 179 = %.4f dB\n", peaksnr);
 
 if (save_imgs)
 	filename = sprintf("recreated_f178_qp%2d.png", QP);

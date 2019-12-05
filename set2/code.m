@@ -38,9 +38,16 @@ for i = 1:nargin()
 	endif
 endfor
 
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%   Step #1                                               %
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 frame178 = imread('frame178.tif');  % Read frame178 as a matrix
 frame179 = imread('frame179.tif');  % Read frame179 as a matrix
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%   Step #2                                               %
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 rows178 = rows(frame178);
 cols178 = columns(frame178);
@@ -76,12 +83,8 @@ for k = 1:rowb
 endfor
 
 % Reconstruct images F-caret and I by concatenating the 4x4 blocks
-for k = 1:rowb
-	F_caret_rows{k} = cat(2, F_caret_blocks{k,:});
-	I_rows{k} = cat(2, I_blocks{k,:});
-endfor
-F_caret = cat(1, F_caret_rows{:});
-I = cat(1, I_rows{:});
+F_caret = cell2mat(F_caret_blocks);
+I = cell2mat(I_blocks);
 
 i = round(I/64); % Perform the post-scaling required by the H.264
 i = uint8(i);    % Convert image I to unsigned 8-bit integer type
@@ -95,7 +98,7 @@ H = entropy(uint8(abs(F_caret)));
 printf("Entropy of |F-caret| (in bits/symbol) = %f\n", H);
 
 peaksnr = psnr(i, frame178);   % Calculate Peak Signal-to-noise Ratio of image i
-printf("PSNR of the recreated image i = %.4f dB\n", peaksnr);
+printf("PSNR of the recreated frame 178 = %.4f dB\n", peaksnr);
 
 #{
 colormap(gray); imagesc(i)
@@ -108,6 +111,10 @@ if (save_imgs)
 	printf("\nSaving %s...\n\n", filename);
 	imwrite(i, filename);
 endif
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%   Step #3                                               %
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 rows179 = rows(frame179);
 cols179 = columns(frame179);
@@ -128,11 +135,11 @@ row_block_sizes = ones(1,rowb) * 16;
 col_block_sizes = ones(1,colb) * 16;
 frame179_blocks = mat2cell(frame179, row_block_sizes, col_block_sizes);
 
-r = i;
+r178 = i;
 
 % For every 16x16 block:
 skips = 0;
-skip(1:rowb, 1:colb) = {0};
+skip = false(rowb,colb);
 for k = 1:rowb
 	for l = 1:colb
 		b = frame179_blocks{k,l};   % Let b hold current 16x16 block
@@ -142,7 +149,7 @@ for k = 1:rowb
 		xmax = k * 16;
 		ymax = l * 16;
 
-		a = r(xmin:xmax, ymin:ymax);
+		a = r178(xmin:xmax, ymin:ymax);
 		a = double(a);
 		sad = SAD(a,b);
 		if (sad < 150)
@@ -171,7 +178,7 @@ for k = 1:rowb
 						xmax+i > rows179 || ymax+j > cols179)
 					continue;
 				endif
-				a = r((xmin+i):(xmax+i), (ymin+j):(ymax+j));
+				a = r178((xmin+i):(xmax+i), (ymin+j):(ymax+j));
 				a = double(a);
 				sad = SAD(a,b);
 				#{
@@ -197,4 +204,94 @@ MVs;
 skip;
 
 printf('Blocks skipped: %2d\n', skips);
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%   Step #4                                               %
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+for k = 1:rowb
+	for l = 1:colb
+		xmin = 1 + (k-1)*16;
+		ymin = 1 + (l-1)*16;
+		xmax = k * 16;
+		ymax = l * 16;
+
+		MVs{k,l};
+		i = MVs{k,l}(1);
+		j = MVs{k,l}(2);
+
+		b = r178((xmin+i):(xmax+i), (ymin+j):(ymax+j));
+		Prediction_blocks{k,l} = b;
+		if (skip(k,l) == 1)
+			PredErr_blocks{k,l} = zeros(16, 16);
+		else
+			PredErr_blocks{k,l} = frame179(xmin:xmax, ymin:ymax) - b;
+		endif
+	endfor
+endfor
+
+Pred = cell2mat(Prediction_blocks);
+PredErr = cell2mat(PredErr_blocks);
+
+#{
+colormap(gray); imagesc(r178)
+pause(3);
+colormap(gray); imagesc(Pred)
+pause(3);
+colormap(gray); imagesc(frame179)
+pause(3);
+colormap(gray); imagesc(PredErr)
+pause(3);
+#}
+
+rowsPE = rows(PredErr);
+colsPE = columns(PredErr);
+
+rowb = fix(rowsPE/4);      % Rows can be partitioned in rowb 4x4 blocks
+colb = fix(colsPE/4);      % Columns can be partitioned in colb 4x4 blocks
+block_num = rowb * colb; % Total number of 4x4 blocks
+
+% Partition PredErr in 4x4 blocks
+row_block_sizes = ones(1,rowb) * 4;
+col_block_sizes = ones(1,colb) * 4;
+PredErr_blocks = mat2cell(PredErr, row_block_sizes, col_block_sizes);
+
+% For every 4x4 block:
+for k = 1:rowb
+	for l = 1:colb
+		b = PredErr_blocks{k,l};   % Let b hold current 4x4 block
+		b = double(b); % Cast uint8 to double to avoid integer_transform complaining
+		F_blocks{k,l}       = integer_transform(b);   % Conduct 2D DCT integer approximation
+		F_caret_blocks{k,l} = quantization(F_blocks{k,l}, QP);    % Quantize 'DCT' coefficients
+		F_tilde_blocks{k,l} = inv_quantization(F_caret_blocks{k,l}, QP);  % "Reverse quantization"
+		I_blocks{k,l}       = inv_integer_transform(F_tilde_blocks{k,l}); % Inverse 2D 'DCT'
+	endfor
+endfor
+
+% Reconstruct images F-caret and I by concatenating the 4x4 blocks
+F_caret = cell2mat(F_caret_blocks);
+I = cell2mat(I_blocks);
+
+i = round(I/64); % Perform the post-scaling required by the H.264
+i = uint8(i);    % Convert image I to unsigned 8-bit integer type
+
+% The following two lines seem redundant but it's better to be safe than sorry
+i(i < 0) = [0];      % Make sure no negative values exist in image i
+i(i > 255) = [255];  % Make sure no values greater that 255 exist in image i
+
+% Calculate entropy of F_caret
+H = entropy(uint8(abs(F_caret)));
+printf("Entropy of |F-caret| (in bits/symbol) = %f\n", H);
+
+r179 = Pred + i;
+
+colormap(gray); imagesc(Pred)
+pause(3);
+colormap(gray); imagesc(r179)
+pause(3);
+colormap(gray); imagesc(frame179)
+pause(3);
+
+peaksnr = psnr(frame179, r179);   % Calculate Peak Signal-to-noise Ratio of frame 179
+printf("PSNR of the recreated frame 179 = %.4f dB\n", peaksnr);
 

@@ -7,7 +7,7 @@
 pkg load image    % Contains function: psnr, entropy
 
 
-% Function definition
+% Function definitions
 function print_usage()
 	printf("USAGE: ./%s [OPTIONS]\n", program_name());
 	printf("Available options:\n");
@@ -49,6 +49,9 @@ frame179 = imread('frame179.tif');  % Read frame179 as a matrix
 %   Step #2                                               %
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
+QP = 25;
+printf("Quantization Parameter = %2d\n\n", QP);
+
 rows178 = rows(frame178);
 cols178 = columns(frame178);
 
@@ -59,8 +62,8 @@ if (mod(rows178,4) != 0 || mod(cols178,4) != 0)
 	return;
 endif
 
-rowb = fix(rows178/4);      % Rows can be partitioned in rowb 4x4 blocks
-colb = fix(cols178/4);      % Columns can be partitioned in colb 4x4 blocks
+rowb = fix(rows178/4);   % Rows can be partitioned in rowb 4x4 blocks
+colb = fix(cols178/4);   % Columns can be partitioned in colb 4x4 blocks
 block_num = rowb * colb; % Total number of 4x4 blocks
 
 % Partition frame178 in 4x4 blocks
@@ -68,13 +71,11 @@ row_block_sizes = ones(1,rowb) * 4;
 col_block_sizes = ones(1,colb) * 4;
 frame178_blocks = mat2cell(frame178, row_block_sizes, col_block_sizes);
 
-QP = 25;
-
 % For every 4x4 block:
 for k = 1:rowb
 	for l = 1:colb
 		b = frame178_blocks{k,l};   % Let b hold current 4x4 block
-		b = double(b); % Cast uint8 to double to avoid integer_transform complaining
+		b = double(b); % Cast uint8 to double to avoid integer_transform() complaining
 		F_blocks{k,l}       = integer_transform(b);   % Conduct 2D DCT integer approximation
 		F_caret_blocks{k,l} = quantization(F_blocks{k,l}, QP);    % Quantize 'DCT' coefficients
 		F_tilde_blocks{k,l} = inv_quantization(F_caret_blocks{k,l}, QP);  % "Reverse quantization"
@@ -93,11 +94,13 @@ i = uint8(i);    % Convert image I to unsigned 8-bit integer type
 i(i < 0) = [0];      % Make sure no negative values exist in image i
 i(i > 255) = [255];  % Make sure no values greater that 255 exist in image i
 
+r178 = i;
+
 % Calculate entropy of F_caret
 H = entropy(uint8(abs(F_caret)));
-printf("Entropy of |F-caret| (in bits/symbol) = %f\n", H);
+printf("Entropy of the quantized coefficients of frame 178 (in bits/symbol) = %f\n", H);
 
-peaksnr = psnr(i, frame178);   % Calculate Peak Signal-to-noise Ratio of image i
+peaksnr = psnr(r178, frame178);   % Calculate Peak Signal-to-noise Ratio of image i
 printf("PSNR of the recreated frame 178 = %.4f dB\n", peaksnr);
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -123,22 +126,22 @@ row_block_sizes = ones(1,rowb) * 16;
 col_block_sizes = ones(1,colb) * 16;
 frame179_blocks = mat2cell(frame179, row_block_sizes, col_block_sizes);
 
-r178 = i;
 
+skips = 0;               % Counter for the number of skip blocks
+skip = false(rowb,colb); % Boolean array holding whether a block is skip
 % For every 16x16 block:
-skips = 0;
-skip = false(rowb,colb);
 for k = 1:rowb
 	for l = 1:colb
-		b = frame179_blocks{k,l};   % Let b hold current 16x16 block
+		b = frame179_blocks{k,l};  % Let b hold current 16x16 block
 		b = double(b);
 		xmin = 1 + (k-1)*16;
 		ymin = 1 + (l-1)*16;
 		xmax = k * 16;
 		ymax = l * 16;
 
+		% Check if current block is a skip
 		a = r178(xmin:xmax, ymin:ymax);
-		a = double(a);
+		a = double(a); % Required for calculating SAD
 		sad = SAD(a,b);
 		if (sad < 150)
 			skips++;
@@ -147,49 +150,33 @@ for k = 1:rowb
 			continue;
 		endif
 
-		#{
-		if (k == 3 && l == 1)
-			a
-			b
-			abs(a-b)
-			colormap(gray); imagesc(b)
-			pause(3);
-			colormap(gray); imagesc(a)
-			pause(3);
-		endif
-		#}
-
-		minSAD = {-1, [-10,-10]};
+		minSAD = {-1, [-10,-10]}; % {min SAD value, MV that resulted in the min SAD}
+		% Perform full search
 		for i = -6:6
 			for j = -6:6
+				% Ignore blocks that lie outside of frame 178 boundaries
 				if (xmin+i < 1 || ymin+j < 1 ||
-						xmax+i > rows179 || ymax+j > cols179)
+						xmax+i > rows178 || ymax+j > cols178)
 					continue;
 				endif
 				a = r178((xmin+i):(xmax+i), (ymin+j):(ymax+j));
-				a = double(a);
+				a = double(a); % Required for calculating SAD
 				sad = SAD(a,b);
-				#{
-				if (i == 0 && j == 0 && k == 1 && l == 1)
-					a
-					b
-					abs(a-b)
-					sad
-				endif
-				#}
+				% Update min SAD if needed
 				if (minSAD{1} == -1 || sad < minSAD{1})
 					minSAD{1} = sad;
 					minSAD{2} = [i,j];
 				endif
 			endfor
 		endfor
-		MVs{k,l} = minSAD{2};
+		MVs{k,l} = minSAD{2};  % Calculated motion vector of current block
 		% printf("[%2d,%2d] %6d (%2d,%2d)\n", k, l, minSAD{1}, minSAD{2});
 	endfor
 endfor
 
-MVs;
-skip;
+% Used for debug purposes
+% MVs
+% skip
 
 printf('Blocks skipped: %2d\n', skips);
 
@@ -277,6 +264,7 @@ printf("Entropy of |F-caret| (in bits/symbol) = %f\n", H);
 
 r179 = Pred + i; % Recreate frame 179 using prediction and recreated prediction error
 
+#{
 colormap(gray); imagesc(r178)
 pause(3);
 colormap(gray); imagesc(Pred)
@@ -287,22 +275,23 @@ colormap(gray); imagesc(frame179)
 pause(3);
 colormap(gray); imagesc(PredErr)
 pause(3);
+#}
 
-peaksnr = psnr(frame179, r179);   % Calculate Peak Signal-to-noise Ratio of frame 179
+peaksnr = psnr(r179, frame179);   % Calculate Peak Signal-to-noise Ratio of frame 179
 printf("PSNR of the recreated frame 179 = %.4f dB\n", peaksnr);
 
 if (save_imgs)
-	filename = sprintf("recreated_f178.png");
+	filename = sprintf("recreated_f178_qp%2d.png", QP);
 	printf("\nSaving %s...\n\n", filename);
 	imwrite(r178, filename);
-	filename = sprintf("recreated_f179.png");
-	printf("\nSaving %s...\n\n", filename);
+	filename = sprintf("recreated_f179_gp%2d.png", QP);
+	printf("\nSaving %s...\n", filename);
 	imwrite(r179, filename);
-	filename = sprintf("prediction_f179.png");
-	printf("\nSaving %s...\n\n", filename);
+	filename = sprintf("prediction_f179_qp%2d.png", QP);
+	printf("\nSaving %s...\n", filename);
 	imwrite(Pred, filename);
-	filename = sprintf("prediction_error_f179.png");
-	printf("\nSaving %s...\n\n", filename);
+	filename = sprintf("prediction_error_f179_qp%2d.png", QP);
+	printf("\nSaving %s...\n", filename);
 	imwrite(PredErr, filename);
 endif
 

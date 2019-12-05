@@ -100,18 +100,6 @@ printf("Entropy of |F-caret| (in bits/symbol) = %f\n", H);
 peaksnr = psnr(i, frame178);   % Calculate Peak Signal-to-noise Ratio of image i
 printf("PSNR of the recreated frame 178 = %.4f dB\n", peaksnr);
 
-#{
-colormap(gray); imagesc(i)
-pause(3);
-#}
-
-% Save image i in PNG format (lossless) if required
-if (save_imgs)
-	filename = sprintf("regenerated_f178.png");
-	printf("\nSaving %s...\n\n", filename);
-	imwrite(i, filename);
-endif
-
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %   Step #3                                               %
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -209,6 +197,7 @@ printf('Blocks skipped: %2d\n', skips);
 %   Step #4                                               %
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
+% For every 16x16 block:
 for k = 1:rowb
 	for l = 1:colb
 		xmin = 1 + (k-1)*16;
@@ -220,9 +209,11 @@ for k = 1:rowb
 		i = MVs{k,l}(1);
 		j = MVs{k,l}(2);
 
+		% Compensate motion for block (k,l) using the corresponding
+		% motion vector and the recreated frame 178.
 		b = r178((xmin+i):(xmax+i), (ymin+j):(ymax+j));
 		Prediction_blocks{k,l} = b;
-		if (skip(k,l) == 1)
+		if (skip(k,l) == 1) % In case of skip blocks, set prediction error to zero
 			PredErr_blocks{k,l} = zeros(16, 16);
 		else
 			PredErr_blocks{k,l} = frame179(xmin:xmax, ymin:ymax) - b;
@@ -230,8 +221,9 @@ for k = 1:rowb
 	endfor
 endfor
 
-Pred = cell2mat(Prediction_blocks);
-PredErr = cell2mat(PredErr_blocks);
+% Reconstruct images Pred and PredErr by concatenating the 4x4 blocks
+Pred = cell2mat(Prediction_blocks); % Prediction
+PredErr = cell2mat(PredErr_blocks); % Prediction Error
 
 #{
 colormap(gray); imagesc(r178)
@@ -247,9 +239,9 @@ pause(3);
 rowsPE = rows(PredErr);
 colsPE = columns(PredErr);
 
-rowb = fix(rowsPE/4);      % Rows can be partitioned in rowb 4x4 blocks
-colb = fix(colsPE/4);      % Columns can be partitioned in colb 4x4 blocks
-block_num = rowb * colb; % Total number of 4x4 blocks
+rowb = fix(rowsPE/4);     % Rows can be partitioned in rowb 4x4 blocks
+colb = fix(colsPE/4);     % Columns can be partitioned in colb 4x4 blocks
+block_num = rowb * colb;  % Total number of 4x4 blocks
 
 % Partition PredErr in 4x4 blocks
 row_block_sizes = ones(1,rowb) * 4;
@@ -283,15 +275,34 @@ i(i > 255) = [255];  % Make sure no values greater that 255 exist in image i
 H = entropy(uint8(abs(F_caret)));
 printf("Entropy of |F-caret| (in bits/symbol) = %f\n", H);
 
-r179 = Pred + i;
+r179 = Pred + i; % Recreate frame 179 using prediction and recreated prediction error
 
+colormap(gray); imagesc(r178)
+pause(3);
 colormap(gray); imagesc(Pred)
 pause(3);
 colormap(gray); imagesc(r179)
 pause(3);
 colormap(gray); imagesc(frame179)
 pause(3);
+colormap(gray); imagesc(PredErr)
+pause(3);
 
 peaksnr = psnr(frame179, r179);   % Calculate Peak Signal-to-noise Ratio of frame 179
 printf("PSNR of the recreated frame 179 = %.4f dB\n", peaksnr);
+
+if (save_imgs)
+	filename = sprintf("recreated_f178.png");
+	printf("\nSaving %s...\n\n", filename);
+	imwrite(r178, filename);
+	filename = sprintf("recreated_f179.png");
+	printf("\nSaving %s...\n\n", filename);
+	imwrite(r179, filename);
+	filename = sprintf("prediction_f179.png");
+	printf("\nSaving %s...\n\n", filename);
+	imwrite(Pred, filename);
+	filename = sprintf("prediction_error_f179.png");
+	printf("\nSaving %s...\n\n", filename);
+	imwrite(PredErr, filename);
+endif
 

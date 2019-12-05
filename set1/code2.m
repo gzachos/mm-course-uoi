@@ -112,12 +112,8 @@ for k = 1:rowb
 endfor
 
 % Reconstruct images F-caret and I by concatenating the 8x8 blocks
-for k = 1:rowb
-	F_caret_rows{k} = cat(2, F_caret_blocks{k,:});
-	I_rows{k} = cat(2, I_blocks{k,:});
-endfor
-F_caret = cat(1, F_caret_rows{:});
-I = cat(1, I_rows{:});
+F_caret = cell2mat(F_caret_blocks);
+I = cell2mat(I_blocks);
 
 % Calculate entropy of F_caret
 if (use_absolute)

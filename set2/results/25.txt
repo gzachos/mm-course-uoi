@@ -1,0 +1,8 @@
+################### QP = 25 ###################
+Entropy of the quantized coefficients of frame 178 (in bits/symbol) = 2.094917
+PSNR of the recreated frame 178 = 39.9124 dB
+Blocks skipped:  0
+Entropy of the quantized coefficients of Prediction Error (in bits/symbol) = 0.823685
+Entropy of the quantized coef. of Pred. Error [NOISE MVs] (in bits/symbol) = 1.386000
+PSNR of the recreated frame 179 = 29.0768 dB
+PSNR of the recreated frame 179 [NOISE MVs] = 23.2239 dB

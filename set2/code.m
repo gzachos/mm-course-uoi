@@ -15,9 +15,72 @@ function print_usage()
 	printf("\t-s, --save-imgs        Save images\n");
 endfunction
 
+% Sum of Absolute Differences
 function retval = SAD(a,b)
 	retval = sum(sum(abs(a - b)));
 endfunction
+
+% Divide image in 4x4 blocks, conduct 2D 'DCT' integer approximation,
+% quantize 'DCT' coefficients, calculate entropy of the quantized coefficients,
+% "Reverse Quantization", inverse 2D 'DCT' and perform H.264 post-scaling.
+% Parameters: 1) Input Image
+%             2) Quantization Parameter
+% Return Values: 1)   Inverse transform result
+%                2,3) Image rows and columns
+%                4)   Entropy of quantized coefficients
+function [i, rows, cols, H] = TQIH(image, QP)
+	rows = rows(image);
+	cols = columns(image);
+
+	% If image cannot be divided in 4x4 blocks, exit.
+	if (mod(rows,4) != 0 || mod(cols,4) != 0)
+		printf("Image size is not multiple of 4!\n");
+		printf("Cannot partition image to 4x4 blocks.\n");
+		return;
+	endif
+
+	rowb = fix(rows/4);   % Rows can be partitioned in rowb 4x4 blocks
+	colb = fix(cols/4);   % Columns can be partitioned in colb 4x4 blocks
+	block_num = rowb * colb; % Total number of 4x4 blocks
+
+	% Partition image in 4x4 blocks
+	row_block_sizes = ones(1,rowb) * 4;
+	col_block_sizes = ones(1,colb) * 4;
+	blocks = mat2cell(image, row_block_sizes, col_block_sizes);
+
+	% For every 4x4 block:
+	for k = 1:rowb
+		for l = 1:colb
+			% Let b hold current 4x4 block
+			b = blocks{k,l};
+			% Cast uint8 to double to avoid integer_transform() complaining
+			b = double(b);
+			% Conduct 2D DCT integer approximation
+			F_blocks{k,l} = integer_transform(b);
+			% Quantize 'DCT' coefficients
+			F_caret_blocks{k,l} = quantization(F_blocks{k,l}, QP);
+			% "Reverse quantization"
+			F_tilde_blocks{k,l} = inv_quantization(F_caret_blocks{k,l}, QP);
+			% Inverse 2D 'DCT'
+			I_blocks{k,l} = inv_integer_transform(F_tilde_blocks{k,l});
+		endfor
+	endfor
+
+	% Reconstruct images F-caret and I by concatenating the 4x4 blocks
+	F_caret = cell2mat(F_caret_blocks);
+	I = cell2mat(I_blocks);
+
+	i = round(I/64); % Perform the post-scaling required by the H.264
+	i = uint8(i);    % Convert image I to unsigned 8-bit integer type
+
+	% The following two lines seem redundant but it's better to be safe than sorry
+	i(i < 0) = [0];      % Make sure no negative values exist in image i
+	i(i > 255) = [255];  % Make sure no values greater that 255 exist in image i
+
+	% Calculate entropy of F_caret
+	H = entropy(uint8(abs(F_caret)));
+endfunction
+
 
 % The following options can be altered using command-line arguments
 save_imgs = 0;    % Save images option. Default value: False
@@ -50,55 +113,11 @@ frame179 = imread('frame179.tif');  % Read frame179 as a matrix
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 QP = 25;
-printf("Quantization Parameter = %2d\n\n", QP);
+printf("\n################### QP = %2d ###################\n", QP);
 
-rows178 = rows(frame178);
-cols178 = columns(frame178);
+[r178, rows178, cols178, H178] = TQIH(frame178, QP);
 
-% If image frame178 cannot be divided in 4x4 blocks, exit.
-if (mod(rows178,4) != 0 || mod(cols178,4) != 0)
-	printf("Image size is not multiple of 4!\n");
-	printf("Cannot partition frame178 to 4x4 blocks.\n");
-	return;
-endif
-
-rowb = fix(rows178/4);   % Rows can be partitioned in rowb 4x4 blocks
-colb = fix(cols178/4);   % Columns can be partitioned in colb 4x4 blocks
-block_num = rowb * colb; % Total number of 4x4 blocks
-
-% Partition frame178 in 4x4 blocks
-row_block_sizes = ones(1,rowb) * 4;
-col_block_sizes = ones(1,colb) * 4;
-frame178_blocks = mat2cell(frame178, row_block_sizes, col_block_sizes);
-
-% For every 4x4 block:
-for k = 1:rowb
-	for l = 1:colb
-		b = frame178_blocks{k,l};   % Let b hold current 4x4 block
-		b = double(b); % Cast uint8 to double to avoid integer_transform() complaining
-		F_blocks{k,l}       = integer_transform(b);   % Conduct 2D DCT integer approximation
-		F_caret_blocks{k,l} = quantization(F_blocks{k,l}, QP);    % Quantize 'DCT' coefficients
-		F_tilde_blocks{k,l} = inv_quantization(F_caret_blocks{k,l}, QP);  % "Reverse quantization"
-		I_blocks{k,l}       = inv_integer_transform(F_tilde_blocks{k,l}); % Inverse 2D 'DCT'
-	endfor
-endfor
-
-% Reconstruct images F-caret and I by concatenating the 4x4 blocks
-F_caret = cell2mat(F_caret_blocks);
-I = cell2mat(I_blocks);
-
-i = round(I/64); % Perform the post-scaling required by the H.264
-i = uint8(i);    % Convert image I to unsigned 8-bit integer type
-
-% The following two lines seem redundant but it's better to be safe than sorry
-i(i < 0) = [0];      % Make sure no negative values exist in image i
-i(i > 255) = [255];  % Make sure no values greater that 255 exist in image i
-
-r178 = i;
-
-% Calculate entropy of F_caret (The quantized coefficients of frame 178)
-H = entropy(uint8(abs(F_caret)));
-printf("Entropy of the quantized coefficients of frame 178 (in bits/symbol) = %f\n", H);
+printf("Entropy of the quantized coefficients of frame 178 (in bits/symbol) = %f\n", H178);
 
 peaksnr = psnr(r178, frame178);   % Calculate PSNR of the recreated frame 178
 printf("PSNR of the recreated frame 178 = %.4f dB\n", peaksnr);
@@ -192,7 +211,6 @@ for k = 1:rowb
 		xmax = k * 16;
 		ymax = l * 16;
 
-		MVs{k,l};
 		i = MVs{k,l}(1);
 		j = MVs{k,l}(2);
 
@@ -224,46 +242,9 @@ colormap(gray); imagesc(PredErr)
 pause(3);
 #}
 
-rowsPE = rows(PredErr);
-colsPE = columns(PredErr);
+[rPE, rowsPE, colsPE, HPE] = TQIH(PredErr, QP);
 
-rowb = fix(rowsPE/4);     % Rows can be partitioned in rowb 4x4 blocks
-colb = fix(colsPE/4);     % Columns can be partitioned in colb 4x4 blocks
-block_num = rowb * colb;  % Total number of 4x4 blocks
-
-% Partition PredErr in 4x4 blocks
-row_block_sizes = ones(1,rowb) * 4;
-col_block_sizes = ones(1,colb) * 4;
-PredErr_blocks = mat2cell(PredErr, row_block_sizes, col_block_sizes);
-
-% For every 4x4 block:
-for k = 1:rowb
-	for l = 1:colb
-		b = PredErr_blocks{k,l};   % Let b hold current 4x4 block
-		b = double(b); % Cast uint8 to double to avoid integer_transform complaining
-		F_blocks{k,l}       = integer_transform(b);   % Conduct 2D DCT integer approximation
-		F_caret_blocks{k,l} = quantization(F_blocks{k,l}, QP);    % Quantize 'DCT' coefficients
-		F_tilde_blocks{k,l} = inv_quantization(F_caret_blocks{k,l}, QP);  % "Reverse quantization"
-		I_blocks{k,l}       = inv_integer_transform(F_tilde_blocks{k,l}); % Inverse 2D 'DCT'
-	endfor
-endfor
-
-% Reconstruct images F-caret and I by concatenating the 4x4 blocks
-F_caret = cell2mat(F_caret_blocks);
-I = cell2mat(I_blocks);
-
-i = round(I/64); % Perform the post-scaling required by the H.264
-i = uint8(i);    % Convert image I to unsigned 8-bit integer type
-
-% The following two lines seem redundant but it's better to be safe than sorry
-i(i < 0) = [0];      % Make sure no negative values exist in image i
-i(i > 255) = [255];  % Make sure no values greater that 255 exist in image i
-
-rPE = i; % Recreated Prediction Error
-
-% Calculate entropy of F_caret (The quantized coefficients of Prediction Error)
-H = entropy(uint8(abs(F_caret)));
-printf("Entropy of the quantized coefficients of Prediction Error (in bits/symbol) = %f\n", H);
+printf("Entropy of the quantized coefficients of Prediction Error (in bits/symbol) = %f\n", HPE);
 
 r179 = Pred + rPE; % Recreate frame 179 using prediction and recreated prediction error
 
@@ -285,16 +266,16 @@ pause(3);
 
 if (save_imgs)
 	filename = sprintf("recreated_f178_qp%2d.png", QP);
-	printf("\nSaving %s...\n\n", filename);
+	printf("\nSaving %s...\n", filename);
 	imwrite(r178, filename);
 	filename = sprintf("recreated_f179_gp%2d.png", QP);
-	printf("\nSaving %s...\n", filename);
+	printf("Saving %s...\n", filename);
 	imwrite(r179, filename);
 	filename = sprintf("prediction_f179_qp%2d.png", QP);
-	printf("\nSaving %s...\n", filename);
+	printf("Saving %s...\n", filename);
 	imwrite(Pred, filename);
 	filename = sprintf("prediction_error_f179_qp%2d.png", QP);
-	printf("\nSaving %s...\n", filename);
+	printf("Saving %s...\n", filename);
 	imwrite(PredErr, filename);
 endif
 

@@ -15,10 +15,39 @@ function print_usage()
 	printf("\t-s, --save-imgs        Save images\n");
 endfunction
 
+
 % Sum of Absolute Differences
 function retval = SAD(a,b)
 	retval = sum(sum(abs(a - b)));
 endfunction
+
+
+% Partition image in (bs)x(bs) blocks
+% Parameters: 1) Input Image
+%             2) Block Size
+% Return Values: 1) Blocks
+%                2,3) Row and column count of (bs)x(bs) blocks
+function [blocks, rowb, colb] = partition_image(image, bs)
+	rows = rows(image);
+	cols = columns(image);
+
+	% If image cannot be divided in (bs)x(bs) blocks, exit.
+	if (mod(rows,bs) != 0 || mod(cols,bs) != 0)
+		printf("Image size is not multiple of %2d!\n", bs);
+		printf("Cannot partition image to %2dx%2d blocks.\n", bs, bs);
+		return;
+	endif
+
+	rowb = fix(rows/bs);   % Rows can be partitioned in rowb (bs)x(bs) blocks
+	colb = fix(cols/bs);   % Columns can be partitioned in colb (bs)x(bs) blocks
+	block_num = rowb * colb;  % Total number of (bs)x(bs) blocks
+
+	% Partition image in (bs)x(bs) blocks
+	row_block_sizes = ones(1,rowb) * bs;
+	col_block_sizes = ones(1,colb) * bs;
+	blocks = mat2cell(image, row_block_sizes, col_block_sizes);
+endfunction
+
 
 % Divide image in 4x4 blocks, conduct 2D 'DCT' integer approximation,
 % quantize 'DCT' coefficients, calculate entropy of the quantized coefficients,
@@ -26,27 +55,13 @@ endfunction
 % Parameters: 1) Input Image
 %             2) Quantization Parameter
 % Return Values: 1)   Inverse transform result
-%                2,3) Image rows and columns
+%                2,3) Image row and column count
 %                4)   Entropy of quantized coefficients
 function [i, rows, cols, H] = TQIH(image, QP)
-	rows = rows(image);
-	cols = columns(image);
-
-	% If image cannot be divided in 4x4 blocks, exit.
-	if (mod(rows,4) != 0 || mod(cols,4) != 0)
-		printf("Image size is not multiple of 4!\n");
-		printf("Cannot partition image to 4x4 blocks.\n");
-		return;
-	endif
-
-	rowb = fix(rows/4);   % Rows can be partitioned in rowb 4x4 blocks
-	colb = fix(cols/4);   % Columns can be partitioned in colb 4x4 blocks
-	block_num = rowb * colb; % Total number of 4x4 blocks
-
 	% Partition image in 4x4 blocks
-	row_block_sizes = ones(1,rowb) * 4;
-	col_block_sizes = ones(1,colb) * 4;
-	blocks = mat2cell(image, row_block_sizes, col_block_sizes);
+	[blocks, rowb, colb] = partition_image(image, 4);
+	rows = rowb * 4;
+	cols = colb * 4;
 
 	% For every 4x4 block:
 	for k = 1:rowb
@@ -126,24 +141,11 @@ printf("PSNR of the recreated frame 178 = %.4f dB\n", peaksnr);
 %   Step #3                                               %
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-rows179 = rows(frame179);
-cols179 = columns(frame179);
+% Partition image in 16x16 blocks
+[frame179_blocks, rowb, colb] = partition_image(frame179, 16);
 
-% If image frame179 cannot be divided in 16x16 blocks, exit.
-if (mod(rows179,16) != 0 || mod(cols179,16) != 0)
-	printf("Image size is not multiple of 16!\n");
-	printf("Cannot partition frame178 to 16x16 blocks.\n");
-	return;
-endif
-
-rowb = fix(rows179/16);   % Rows can be partitioned in rowb 16x16 blocks
-colb = fix(cols179/16);   % Columns can be partitioned in colb 16x16 blocks
-block_num = rowb * colb;  % Total number of 16x16 blocks
-
-% Partition frame179 in 16x16 blocks
-row_block_sizes = ones(1,rowb) * 16;
-col_block_sizes = ones(1,colb) * 16;
-frame179_blocks = mat2cell(frame179, row_block_sizes, col_block_sizes);
+rows179 = rowb * 16;
+cols179 = colb * 16;;
 
 skips = 0;               % Counter for the number of skip blocks
 skip = false(rowb,colb); % Boolean array holding whether a block is skip
@@ -230,17 +232,6 @@ endfor
 % Reconstruct images Pred and PredErr by concatenating the 16x16 blocks
 Pred = cell2mat(Prediction_blocks); % Prediction
 PredErr = cell2mat(PredErr_blocks); % Prediction Error
-
-#{
-colormap(gray); imagesc(r178)
-pause(3);
-colormap(gray); imagesc(Pred)
-pause(3);
-colormap(gray); imagesc(frame179)
-pause(3);
-colormap(gray); imagesc(PredErr)
-pause(3);
-#}
 
 [rPE, rowsPE, colsPE, HPE] = TQIH(PredErr, QP);
 

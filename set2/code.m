@@ -202,7 +202,7 @@ endfor
 printf('Blocks skipped: %2d\n', skips);
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%   Step #4                                               %
+%   Steps #4,5                                            %
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 % For every 16x16 block:
@@ -213,18 +213,30 @@ for k = 1:rowb
 		xmax = k * 16;
 		ymax = l * 16;
 
+		% (i,j): MV
 		i = MVs{k,l}(1);
 		j = MVs{k,l}(2);
+		% (ni,nj): MV with noise in [-2,2]
+		do
+			ni = i + (unidrnd(5)-3);
+		until (xmin+ni >= 1 && xmax+ni <= rows178)
+		do
+			nj = j + (unidrnd(5)-3);
+		until (ymin+nj >= 1 && ymax+nj <= cols178)
 
 		% Compensate motion for block (k,l) using the corresponding
 		% motion vector and the recreated frame 178.
-		p = r178((xmin+i):(xmax+i), (ymin+j):(ymax+j));
+		p  = r178((xmin+i):(xmax+i), (ymin+j):(ymax+j));
+		np = r178((xmin+ni):(xmax+ni), (ymin+nj):(ymax+nj));
 		Prediction_blocks{k,l} = p;
+		Noise_Prediction_blocks{k,l} = np;
 		% Calculate prediction error
 		if (skip(k,l) == 1) % In case of skip blocks, set prediction error to zero
 			PredErr_blocks{k,l} = zeros(16, 16);
+			Noise_PredErr_blocks{k,l} = zeros(16, 16);
 		else
 			PredErr_blocks{k,l} = frame179(xmin:xmax, ymin:ymax) - p;
+			Noise_PredErr_blocks{k,l} = frame179(xmin:xmax, ymin:ymax) - np;
 		endif
 	endfor
 endfor
@@ -232,15 +244,22 @@ endfor
 % Reconstruct images Pred and PredErr by concatenating the 16x16 blocks
 Pred = cell2mat(Prediction_blocks); % Prediction
 PredErr = cell2mat(PredErr_blocks); % Prediction Error
+Noise_Pred = cell2mat(Noise_Prediction_blocks); % Prediction [Noise MVs]
+Noise_PredErr = cell2mat(Noise_PredErr_blocks); % Prediction Error [Noise MVs]
 
 [rPE, rowsPE, colsPE, HPE] = TQIH(PredErr, QP);
+[nrPE, nrowsPE, ncolsPE, nHPE] = TQIH(Noise_PredErr, QP);
 
 printf("Entropy of the quantized coefficients of Prediction Error (in bits/symbol) = %f\n", HPE);
+printf("Entropy of the quantized coef. of Pred. Error [NOISE MVs] (in bits/symbol) = %f\n", nHPE);
 
 r179 = Pred + rPE; % Recreate frame 179 using prediction and recreated prediction error
+nr179 = Noise_Pred + nrPE; % Recreate frame 179 [Noise MVs]
 
-peaksnr = psnr(r179, frame179);   % Calculate Peak Signal-to-noise Ratio of frame 179
+peaksnr = psnr(r179, frame179);         % Calculate PSNR of frame 179
+noise_peaksnr = psnr(nr179, frame179);  % Calculate PSNR of frame 179 [Noise MVs]
 printf("PSNR of the recreated frame 179 = %.4f dB\n", peaksnr);
+printf("PSNR of the recreated frame 179 [NOISE MVs] = %.4f dB\n", noise_peaksnr);
 
 #{
 colormap(gray); imagesc(r178)
@@ -268,5 +287,14 @@ if (save_imgs)
 	filename = sprintf("prediction_error_f179_qp%2d.png", QP);
 	printf("Saving %s...\n", filename);
 	imwrite(PredErr, filename);
+	filename = sprintf("recreated_f179_gp%2d_noise.png", QP);
+	printf("Saving %s...\n", filename);
+	imwrite(nr179, filename);
+	filename = sprintf("prediction_f179_qp%2d_noise.png", QP);
+	printf("Saving %s...\n", filename);
+	imwrite(Noise_Pred, filename);
+	filename = sprintf("prediction_error_f179_qp%2d_noise.png", QP);
+	printf("Saving %s...\n", filename);
+	imwrite(Noise_PredErr, filename);
 endif
 

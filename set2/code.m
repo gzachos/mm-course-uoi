@@ -231,13 +231,18 @@ for k = 1:rowb
 		% (i,j): MV
 		i = MVs{k,l}(1);
 		j = MVs{k,l}(2);
+
 		% (ni,nj): MV with noise in [-2,2]
-		do
-			ni = i + (unidrnd(5)-3);
-		until (xmin+ni >= 1 && xmax+ni <= rows178)
-		do
-			nj = j + (unidrnd(5)-3);
-		until (ymin+nj >= 1 && ymax+nj <= cols178)
+		if (skip(k,l) == 1) % Do not add noise in MVs of skip blocks
+			ni = nj = 0;
+		else
+			do
+				ni = i + (unidrnd(5)-3);
+			until (xmin+ni >= 1 && xmax+ni <= rows178)
+			do
+				nj = j + (unidrnd(5)-3);
+			until (ymin+nj >= 1 && ymax+nj <= cols178)
+		endif
 
 		% Compensate motion for block (k,l) using the corresponding
 		% motion vector and the recreated frame 178.

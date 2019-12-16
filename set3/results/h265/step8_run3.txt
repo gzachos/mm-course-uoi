@@ -1,0 +1,23 @@
+SUMMARY --------------------------------------------------------
+	Total Frames |   Bitrate     Y-PSNR    U-PSNR    V-PSNR    YUV-PSNR 
+	      300    a     194.9936   41.2600   44.0483   45.1247   41.6991
+
+
+I Slices--------------------------------------------------------
+	Total Frames |   Bitrate     Y-PSNR    U-PSNR    V-PSNR    YUV-PSNR 
+	        1    i     991.2000   42.8915   44.7410   46.9347   43.6424
+
+
+P Slices--------------------------------------------------------
+	Total Frames |   Bitrate     Y-PSNR    U-PSNR    V-PSNR    YUV-PSNR 
+	        0    p         -nan      -nan      -nan      -nan      -nan
+
+
+B Slices--------------------------------------------------------
+	Total Frames |   Bitrate     Y-PSNR    U-PSNR    V-PSNR    YUV-PSNR 
+	      299    b     192.3307   41.2545   44.0460   45.1186   41.6938
+
+RVM: 0.000
+Bytes written to file: 243742 (194.994 kbps)
+
+ Total Time:      276.226 sec.

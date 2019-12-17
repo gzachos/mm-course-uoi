@@ -1,5 +1,7 @@
 #!/usr/bin/env octave
 
+% Developed by George Z. Zachos using GNU Octave, version 4.2.2
+
 H264_R_B0 = [97.600, 146.27, 195.01, 243.93];
 H264_P_B0 = [35.374, 37.475, 38.974, 40.179];
 
